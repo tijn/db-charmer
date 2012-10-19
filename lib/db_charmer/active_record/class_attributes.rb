@@ -1,6 +1,16 @@
 module DbCharmer
   module ActiveRecord
     module ClassAttributes
+      class AttributesHandler
+        def initialize
+          @proxies = {}
+          @connection_levels  = Hash.new(0)
+          @remappings = {}
+        end
+
+        attr_accessor :proxies, :connection_levels, :remappings
+      end
+
       @@db_charmer_opts = {}
       def db_charmer_opts=(opts)
         @@db_charmer_opts[self.name] = opts
@@ -11,13 +21,17 @@ module DbCharmer
       end
 
       #-----------------------------------------------------------------------------
-      @@db_charmer_connection_proxies = {}
+      def db_charmer_attributes_handler
+        Thread.current[:__dbcharmer__] ||= AttributesHandler.new
+      end
+
+      #-----------------------------------------------------------------------------
       def db_charmer_connection_proxy=(proxy)
-        @@db_charmer_connection_proxies[self.name] = proxy
+        db_charmer_attributes_handler.proxies[self.name] = proxy
       end
 
       def db_charmer_connection_proxy
-        @@db_charmer_connection_proxies[self.name]
+        db_charmer_attributes_handler.proxies[self.name]
       end
 
       #-----------------------------------------------------------------------------
@@ -63,13 +77,12 @@ module DbCharmer
       end
 
       #-----------------------------------------------------------------------------
-      @@db_charmer_connection_levels = Hash.new(0)
       def db_charmer_connection_level=(level)
-        @@db_charmer_connection_levels[self.name] = level
+        db_charmer_attributes_handler.connection_levels[self.name] = level
       end
 
       def db_charmer_connection_level
-        @@db_charmer_connection_levels[self.name] || 0
+        db_charmer_attributes_handler.connection_levels[self.name] || 0
       end
 
       def db_charmer_top_level_connection?
@@ -77,24 +90,23 @@ module DbCharmer
       end
 
       #-----------------------------------------------------------------------------
-      @@db_charmer_database_remappings = Hash.new
       def db_charmer_remapped_connection
         return nil if (db_charmer_connection_level || 0) > 0
         name = :master
         proxy = db_charmer_connection_proxy
         name = proxy.db_charmer_connection_name.to_sym if proxy
 
-        remapped = @@db_charmer_database_remappings[name]
+        remapped = db_charmer_attributes_handler.remappings[name]
         remapped ? DbCharmer::ConnectionFactory.connect(remapped, true) : nil
       end
 
       def db_charmer_database_remappings
-        @@db_charmer_database_remappings
+        db_charmer_attributes_handler.remappings
       end
 
       def db_charmer_database_remappings=(mappings)
         raise "Mappings must be nil or respond to []" if mappings && (! mappings.respond_to?(:[]))
-        @@db_charmer_database_remappings = mappings || { }
+        db_charmer_attributes_handler.remappings = mappings || {}
       end
     end
   end
